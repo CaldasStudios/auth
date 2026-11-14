@@ -60,7 +60,6 @@ body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font:16px/1.
 .brand{width:100%;max-width:440px;display:flex;flex-direction:column;align-items:center;gap:12px;margin:0 0 28px;text-align:center}
 .brand.wide{max-width:560px}
 .brand a{display:block;line-height:0;border-radius:4px}
-.tagline{margin:0;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--link)}
 .logo{display:block;height:32px;width:auto}
 .logo-dark{display:none}
 @media (prefers-color-scheme:dark){.logo-light{display:none}.logo-dark{display:block}}
@@ -117,8 +116,7 @@ ${fonts}
 ${opts.webauthn ? `<script src="/assets/webauthn.js"></script>` : ""}
 </head>
 <body><div class="content">
-<header class="brand${opts.wide ? " wide" : ""}"><a href="/" aria-label="Caldas Studios account">${logo}</a>
-<p class="tagline mono">Ideas, made executable.</p></header>
+<header class="brand${opts.wide ? " wide" : ""}"><a href="/" aria-label="Caldas Studios account">${logo}</a></header>
 <main${opts.wide ? ` class="wide"` : ""}>${body}</main>
 <footer class="mono">Secure sign-in</footer>
 </div>
