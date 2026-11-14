@@ -124,7 +124,9 @@ This prints the `client_id` and `client_secret`. The secret is shown once, so pu
 
 - `--trusted`: a first-party app with no consent screen. Also add its `client_id` to `TRUSTED_CLIENT_IDS` and restart. That keeps its settings from being changed through the API.
 - `--public`: an SPA or mobile app with no secret, using PKCE only. It always shows consent.
-- Production redirect URIs must use `https`. Outside `NODE_ENV=production`, `http://localhost` and `http://127.0.0.1` are also accepted for development.
+- `--allow-localhost`: explicitly allow localhost callbacks and logout redirects for testing, including when the auth server runs in production. Supports `localhost`, `127.0.0.1` and `[::1]`; other HTTP hosts remain blocked. For example: `npm run client:create -- --name "Local test" --redirect http://localhost:5173/api/auth/callback/caldas --allow-localhost`.
+
+**Danger:** localhost redirects are for testing only. A local process could intercept authorization codes. Use test accounts, and remove localhost URIs before production use. In the dashboard, enable **Danger: allow localhost redirects for testing** when registering or editing the app. Apps with localhost URIs show a danger badge. To turn testing off, remove all localhost callback and logout URIs and uncheck the option. The option controls dashboard/CLI registration; admins using Better Auth's client API directly can also register localhost URIs. Exact registered URI and port matching still applies.
 
 Only users with the `admin` role can register apps. Apps belong to all admins together, so any admin can manage them.
 
@@ -248,3 +250,7 @@ See [.env.example](.env.example). Key variables:
 - Email verification and password reset need an email sender. Add `sendVerificationEmail` / `sendResetPassword` in [src/auth.ts](src/auth.ts) once a mail provider is chosen. Turn on `emailVerification.sendOnSignUp` and `emailAndPassword.requireEmailVerification` too. Verified accounts then link to Google automatically when the emails match.
 - Until then, an existing account can be linked to Google by signing in with the password and clicking **Connect Google**, or by marking the email verified in the database.
 - After adding Better Auth plugins, run `npm run migrate` again.
+
+## License
+
+[MIT](LICENSE) © 2026 CaldasStudios.

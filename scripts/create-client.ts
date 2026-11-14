@@ -1,8 +1,9 @@
 // Registers an app as an OAuth/OIDC client. Run with ADMIN_EMAIL and ADMIN_PASSWORD set.
 // npm run client:create -- --name "My App" --redirect https://app.example.com/api/auth/callback/caldas
-//   [--redirect ...] [--logout-redirect https://app.example.com] [--trusted] [--public]
+//   [--redirect ...] [--logout-redirect https://app.example.com] [--trusted] [--public] [--allow-localhost]
 import { parseArgs } from "node:util";
 import { auth } from "../src/auth.ts";
+import { validateAppRedirects } from "../src/redirect-policy.ts";
 
 const { values } = parseArgs({
   options: {
@@ -11,6 +12,7 @@ const { values } = parseArgs({
     "logout-redirect": { type: "string", multiple: true },
     trusted: { type: "boolean", default: false },
     public: { type: "boolean", default: false },
+    "allow-localhost": { type: "boolean", default: false },
   },
 });
 
@@ -22,6 +24,10 @@ if (!values.name || !values.redirect?.length || !ADMIN_EMAIL || !ADMIN_PASSWORD)
 if (values.trusted && values.public) {
   console.error("--trusted cannot be combined with --public (public clients must always show consent).");
   process.exit(1);
+}
+validateAppRedirects([...values.redirect, ...(values["logout-redirect"] ?? [])], values["allow-localhost"]);
+if (values["allow-localhost"]) {
+  console.error("DANGER: Localhost redirects are for testing only. A local process could intercept authorization codes. Remove localhost URIs before production use.");
 }
 
 // The admin endpoints need a signed-in admin session.

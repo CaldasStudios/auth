@@ -34,6 +34,7 @@ th{color:var(--muted);font-weight:500}td.n,th.n{text-align:right;font-variant-nu
 .app code{font-size:.85rem;word-break:break-all}.app ul{margin:6px 0 0;padding-left:18px;font-size:.88rem;word-break:break-all}
 .badge{font-size:.72rem;font-weight:600;padding:2px 7px;border-radius:99px;border:1px solid var(--line);color:var(--muted)}
 .badge.off{color:var(--danger);border-color:currentColor}
+.testing-warning{color:var(--danger);border:1px solid currentColor;border-radius:8px;padding:10px;margin-top:12px}.testing-warning label{margin:0}.testing-warning p{font-size:.8rem;margin:6px 0 0}
 .stats{display:flex;gap:18px;flex-wrap:wrap;margin:10px 0;font-size:.88rem}.stats b{font-variant-numeric:tabular-nums}
 .actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 dialog{border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--fg);width:min(520px,calc(100vw - 32px));padding:20px}
@@ -50,6 +51,8 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => "&#" + c.charCodeAt(0) + ";");
 const fmt = (n) => Number(n || 0).toLocaleString();
 let stats = { apps: {} };
+const hasLocalhostRedirects = (app) => [...(app?.redirect_uris || []), ...(app?.post_logout_redirect_uris || [])]
+  .some((uri) => URL.canParse(uri) && ["localhost", "127.0.0.1", "[::1]"].includes(new URL(uri).hostname));
 
 async function api(path, method = "GET", body) {
   const res = await fetch("/admin/api" + path, {
@@ -132,6 +135,7 @@ async function loadApps() {
     const isPublic = a.token_endpoint_auth_method === "none";
     const badges = [
       a.disabled ? '<span class="badge off">Disabled</span>' : "",
+      hasLocalhostRedirects(a) ? '<span class="badge off">Danger: localhost testing</span>' : "",
       a.skip_consent ? '<span class="badge">Trusted</span>' : "",
       isPublic ? '<span class="badge">Public (PKCE)</span>' : '<span class="badge">Confidential</span>',
       a.locked ? '<span class="badge" title="Listed in TRUSTED_CLIENT_IDS; change it in the server config">Locked</span>' : "",
@@ -173,6 +177,7 @@ function openForm(app) {
   form.logo_uri.value = app?.logo_uri || "";
   form.redirect_uris.value = (app?.redirect_uris || []).join("\\n");
   form.post_logout_redirect_uris.value = (app?.post_logout_redirect_uris || []).join("\\n");
+  form.allow_localhost.checked = hasLocalhostRedirects(app);
   form.skip_consent.checked = !!app?.skip_consent;
   form.public.checked = app?.token_endpoint_auth_method === "none";
   form.public.disabled = !!app;
@@ -188,6 +193,7 @@ form.addEventListener("submit", async (e) => {
     logo_uri: form.logo_uri.value,
     redirect_uris: lines(form.redirect_uris.value),
     post_logout_redirect_uris: lines(form.post_logout_redirect_uris.value),
+    allow_localhost: form.allow_localhost.checked,
     skip_consent: form.skip_consent.checked,
   };
   form.querySelectorAll("button").forEach((b) => (b.disabled = true));
@@ -285,9 +291,13 @@ export const adminPage = (user: { name: string; email: string }) => `<!doctype h
 <p class="hint">Shown on the sign-in and consent screens. Square image, https only.</p>
 <label for="f-redirect">Redirect URIs (one per line)</label>
 <textarea id="f-redirect" name="redirect_uris" required placeholder="https://app.caldasstudios.com/api/auth/callback/caldas"></textarea>
-<p class="hint">Must be https in production. Better Auth apps use <code>/api/auth/callback/caldas</code>.</p>
+<p class="hint">Use https, or enable localhost testing below. Better Auth apps use <code>/api/auth/callback/caldas</code>.</p>
 <label for="f-logout">Logout redirect URIs (optional)</label>
 <textarea id="f-logout" name="post_logout_redirect_uris" placeholder="https://app.caldasstudios.com"></textarea>
+<div class="testing-warning">
+<label class="check"><input type="checkbox" name="allow_localhost" aria-describedby="localhost-warning"> <span>Danger: allow localhost redirects for testing</span></label>
+<p id="localhost-warning">Allows HTTP callbacks and logout redirects to localhost, 127.0.0.1 and [::1], including on this hosted server. A local process could intercept authorization codes. Use only with test accounts. Remove all localhost URIs and turn this off before production use.</p>
+</div>
 <label class="check"><input type="checkbox" name="skip_consent"> <span>Trusted first-party app (no consent screen)</span></label>
 <label class="check"><input type="checkbox" name="public"> <span>Public app (SPA or mobile, no secret, PKCE only). Cannot be changed later.</span></label>
 <div role="alert" aria-live="polite"></div>

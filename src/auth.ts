@@ -4,6 +4,7 @@ import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { Pool } from "pg";
 import { attachDatabasePool } from "@vercel/functions";
+import { isLocalhostUri } from "./redirect-policy.ts";
 
 const list = (value?: string) =>
   (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
@@ -70,9 +71,8 @@ export const auth = betterAuth({
       // Only admins may create or manage OAuth clients (apps).
       clientPrivileges: ({ user }) => user?.role === "admin",
       clientReference: ({ user }) => (user?.role === "admin" ? ADMIN_CLIENT_REFERENCE : undefined),
-      // Local development: let web apps on localhost use http callbacks.
-      allowInsecureRedirectUri: (url) =>
-        process.env.NODE_ENV !== "production" && ["localhost", "127.0.0.1"].includes(url.hostname),
+      // Admin registration gates localhost behind an explicit testing option; matching stays exact.
+      allowInsecureRedirectUri: (url) => isLocalhostUri(url.href),
     }),
   ],
 });

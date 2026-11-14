@@ -5,6 +5,7 @@ import { auth, ownOrigin, trustedClientIds } from "./auth.ts";
 import { adminPage } from "./admin-page.ts";
 import { errorPage } from "./pages.ts";
 import { overview } from "./traffic.ts";
+import { validateAppRedirects } from "./redirect-policy.ts";
 
 type Session = NonNullable<Awaited<ReturnType<typeof auth.api.getSession>>>;
 const admin = new Hono<{ Variables: { session: Session } }>().basePath("/admin");
@@ -59,10 +60,12 @@ function logoUrl(v: unknown) {
 
 function appFields(body: Record<string, unknown>) {
   const logout = urls(body.post_logout_redirect_uris);
+  const redirects = urls(body.redirect_uris);
+  validateAppRedirects([...(redirects ?? []), ...(logout ?? [])], body.allow_localhost === true);
   const fields = {
     client_name: typeof body.client_name === "string" ? body.client_name.trim().slice(0, 100) : undefined,
-    redirect_uris: urls(body.redirect_uris),
-    post_logout_redirect_uris: logout?.length ? logout : undefined,
+    redirect_uris: redirects,
+    post_logout_redirect_uris: logout,
     skip_consent: bool(body.skip_consent),
     disabled: bool(body.disabled),
     logo_uri: logoUrl(body.logo_uri),
