@@ -23,13 +23,13 @@ Centralized sign-in for every CaldasStudios app. One account, one database for i
 
 Node 24 (runs TypeScript directly) · Hono · Better Auth 1.7 · `@better-auth/oauth-provider` · PostgreSQL
 
-Plugins: `oauthProvider` (OAuth 2.1 + OIDC, PKCE required), `jwt` (signing keys and JWKS), `admin` (user roles, bans).
+Plugins: `oauthProvider` (OAuth 2.1 + OIDC, PKCE required), `jwt` (signing keys and JWKS), `admin` (user roles, bans), `twoFactor` (authenticator app + backup codes), `passkey` (WebAuthn). Optional Google sign-in.
 
 ## Run locally
 
 ```bash
 cp .env.example .env               # then set BETTER_AUTH_SECRET: openssl rand -base64 32
-docker compose up -d db            # Postgres on 127.0.0.1:5432
+docker compose up -d db            # Postgres on 127.0.0.1:5433
 npm install
 npm run migrate                    # creates the auth tables
 npm run admin:create -- you@caldasstudios.com 'a-long-password' "Your Name"
@@ -42,9 +42,12 @@ To run the server in Docker as well: `docker compose --profile app up -d --build
 
 | Path | Purpose |
 | --- | --- |
-| `/sign-in`, `/sign-up` | Login and registration. Apps never build their own. |
+| `/sign-in`, `/sign-up` | Login and registration (password, passkey, Google). Apps never build their own. |
+| `/two-factor` | Asks for the authenticator or backup code after a password sign-in when 2FA is on. |
+| `/error` | Explains Google sign-in errors. |
 | `/consent` | Shown to users for apps that are not marked trusted. |
-| `/` | Shows the signed-in account and a sign-out button. |
+| `/` | Account page: two-step verification, passkeys, connecting Google, sign-out. Admins also get a link to `/admin`. |
+| `/admin` | Admin dashboard: traffic and app (OAuth client) management. Admins only. |
 | `/api/auth/.well-known/openid-configuration` | OIDC discovery (also at `/.well-known/openid-configuration`). |
 | `/.well-known/oauth-authorization-server/api/auth` | RFC 8414 metadata. |
 | `/api/auth/oauth2/authorize`, `/token`, `/userinfo`, `/end-session`, `/introspect`, `/revoke` | OAuth/OIDC endpoints. |
@@ -73,7 +76,22 @@ This prints the `client_id` and `client_secret`. The secret is shown once, so pu
 - `--public`: an SPA or mobile app with no secret, using PKCE only. It always shows consent.
 - Production redirect URIs must use `https`. Outside `NODE_ENV=production`, `http://localhost` and `http://127.0.0.1` are also accepted for development.
 
-Only users with the `admin` role can register apps.
+Only users with the `admin` role can register apps. Apps belong to all admins together, so any admin can manage them.
+
+You can also do all of this from the dashboard at `/admin`.
+
+## Admin dashboard
+
+`/admin` is only open to users with the `admin` role. Others get a 403, and signed-out visitors go to `/sign-in`.
+
+- **Traffic**: requests per day (7, 30 or 90 days), error rate, user and session counts, top endpoints, and per-app sign-in requests, token requests, errors and users holding live tokens.
+- **Apps**: register, edit (name, logo, redirect URIs, logout URIs, trusted), disable or enable, rotate the secret, and delete. New and rotated secrets are shown once.
+
+Traffic is counted per UTC day in the `traffic_daily` table, which the server creates on start. Counters are written every 15 seconds, so the newest requests show up after a short delay. `/health`, `/admin` and static files under `/assets` are not counted. Per-app numbers come from `client_id` on `/authorize` and HTTP Basic credentials on `/token`, so public apps' token requests are only counted in the endpoint totals.
+
+Apps listed in `TRUSTED_CLIENT_IDS` show as **Locked** and cannot be changed from the dashboard. Remove the ID from that variable and restart to edit them.
+
+The dashboard's write API (`/admin/api/*`) only accepts same-origin JSON requests, so `BETTER_AUTH_URL` must match the URL you open the dashboard on.
 
 ### 2a. App built with Better Auth (recommended)
 
@@ -140,6 +158,24 @@ Do not copy passwords or credentials into app databases. Name and email can be c
 
 For backend APIs that accept access tokens, register the API as a resource (`resources` in `oauthProvider`). Clients then get JWT access tokens that the API verifies against `/api/auth/jwks`. See [Protect your API](https://better-auth.com/docs/plugins/oauth-provider/resource-server). Without a resource, access tokens are opaque and can be checked with `/api/auth/oauth2/introspect`.
 
+## Sign-in methods
+
+The sign-in pages use the Caldas Studios identity from [CaldasStudios/brand-assets](https://github.com/CaldasStudios/brand-assets), copied into `assets/brand/`. When an app sends a user to sign in, the page shows the app's name and logo next to the Caldas Studios icon. Set the logo in the admin dashboard; it must be an `https` URL to a square image. Apps without a logo show their first letter.
+
+All of these happen on the auth server, so every app gets them without changes. Each one also works in the middle of an app's OAuth flow and sends the user back to the app afterwards.
+
+- **Password**, with optional **two-step verification**. Users turn it on from their account page: scan the QR code with an authenticator app, confirm one code, and save the 10 backup codes. After that, a password sign-in also asks for a code. "Trust this device" skips the code for 30 days on that browser. Only accounts with a password can use it.
+- **Passkeys**. Users add them on their account page, then use "Sign in with a passkey". Passkeys are bound to the domain in `BETTER_AUTH_URL`, so changing that domain makes existing passkeys stop working. Passkey sign-ins don't ask for a 2FA code, because the passkey already is a second factor.
+- **Google**. Set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, then restart. Google sign-ins don't ask for a 2FA code either.
+
+### Google setup
+
+1. In [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** of type **Web application**.
+2. Authorized redirect URI: `BETTER_AUTH_URL/api/auth/callback/google`, for example `https://auth.caldasstudios.com/api/auth/callback/google`. For local development: `http://localhost:3000/api/auth/callback/google`.
+3. Put the ID and secret in `.env` and restart.
+
+A Google sign-in creates a new account when the email is new. If an account with that email already exists, the two are only joined automatically when that account's email has been verified. Otherwise the user gets an error page asking them to sign in with their password and click **Connect Google** on their account page. This stops someone from registering a victim's email with a password before the victim signs in with Google.
+
 ## Environment
 
 See [.env.example](.env.example). Key variables:
@@ -151,11 +187,13 @@ See [.env.example](.env.example). Key variables:
 | `DATABASE_URL` | Postgres used only by this server. |
 | `TRUSTED_CLIENT_IDS` | Comma-separated IDs of first-party apps. |
 | `TRUSTED_ORIGINS` | Origins allowed to call `/api/auth` from a browser. |
-| `DISABLE_SIGNUP` | `true` limits accounts to ones created by admins. |
+| `DISABLE_SIGNUP` | `true` limits accounts to ones created by admins. This also stops Google from creating new accounts. |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Turn on "Continue with Google". Leave empty to hide it. |
 
 ## Production checklist
 
 - Serve over HTTPS behind a reverse proxy. Set `NODE_ENV=production` and the `https://` `BETTER_AUTH_URL`.
 - Use a strong `POSTGRES_PASSWORD` and back up the auth database.
-- Email verification and password reset need an email sender. Add `sendVerificationEmail` / `sendResetPassword` in [src/auth.ts](src/auth.ts) once a mail provider is chosen.
+- Email verification and password reset need an email sender. Add `sendVerificationEmail` / `sendResetPassword` in [src/auth.ts](src/auth.ts) once a mail provider is chosen. Turn on `emailVerification.sendOnSignUp` and `emailAndPassword.requireEmailVerification` too. Verified accounts then link to Google automatically when the emails match.
+- Until then, an existing account can be linked to Google by signing in with the password and clicking **Connect Google**, or by marking the email verified in the database.
 - After adding Better Auth plugins, run `npm run migrate` again.

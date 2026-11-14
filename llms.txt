@@ -14,6 +14,7 @@ Use this file when adding login to a new CaldasStudios app.
 - Client authentication at the token endpoint: `client_secret_basic`. Public clients (SPA or mobile) use `none` with PKCE only.
 - User identity: the `sub` claim. It is stable and unique per user across all apps.
 - The login, sign-up and consent pages live on the auth server. Apps never build their own login or password forms.
+- Password, two-step verification (authenticator app), passkeys and Google sign-in are all handled there. Apps get them for free and should not add their own 2FA, passkey or Google login.
 - Production redirect URIs must be `https`. `http://localhost` and `http://127.0.0.1` work only while the auth server is not in production mode.
 
 ## Endpoints
