@@ -3,6 +3,7 @@ import { admin, jwt, twoFactor } from "better-auth/plugins";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
 import { Pool } from "pg";
+import { attachDatabasePool } from "@vercel/functions";
 
 const list = (value?: string) =>
   (value ?? "").split(",").map((v) => v.trim()).filter(Boolean);
@@ -14,7 +15,13 @@ const signUpDisabled = process.env.DISABLE_SIGNUP === "true";
 const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = process.env;
 export const googleEnabled = Boolean(GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET);
 export const ownOrigin = new URL(process.env.BETTER_AUTH_URL ?? "http://localhost:3000").origin;
-export const db = new Pool({ connectionString: process.env.DATABASE_URL });
+export const db = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  max: 5,
+  idleTimeoutMillis: 5_000,
+  connectionTimeoutMillis: 15_000,
+});
+if (process.env.VERCEL === "1") attachDatabasePool(db);
 
 export const auth = betterAuth({
   appName: "CaldasStudios",

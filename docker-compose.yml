@@ -18,6 +18,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgres://auth:${POSTGRES_PASSWORD:-auth}@db:5432/auth
+      DATABASE_URL_UNPOOLED: ""
     ports: ["3000:3000"]
     depends_on:
       db: { condition: service_healthy }

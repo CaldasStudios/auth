@@ -1,8 +1,7 @@
 // Request counters for the admin dashboard, kept as daily totals in the auth database.
-// Counts are buffered in memory and written in one query every few seconds.
+// Writes finish during the request so serverless suspension cannot discard counters.
 import { ADMIN_CLIENT_REFERENCE, db } from "./auth.ts";
 
-const FLUSH_MS = 15_000;
 const buffer = new Map<string, number>();
 
 export async function setupTraffic() {
@@ -20,10 +19,6 @@ export async function setupTraffic() {
      where "referenceId" is null and "userId" in (select id from "user" where role = 'admin')`,
     [ADMIN_CLIENT_REFERENCE],
   );
-  setInterval(flush, FLUSH_MS).unref();
-  for (const signal of ["SIGINT", "SIGTERM"] as const) {
-    process.once(signal, () => flush().finally(() => process.exit(0)));
-  }
 }
 
 // The app a request belongs to: `client_id` on /authorize, or HTTP Basic credentials on /token.
@@ -40,12 +35,13 @@ function clientIdOf(req: Request) {
   }
 }
 
-export function record(req: Request, path: string, status: number) {
+export async function record(req: Request, path: string, status: number) {
   const day = new Date().toISOString().slice(0, 10);
   // Unknown paths are grouped so random URLs cannot grow the table.
   const bucket = status === 404 ? "(not found)" : path;
   const key = JSON.stringify([day, bucket, clientIdOf(req).slice(0, 200), Math.floor(status / 100)]);
   buffer.set(key, (buffer.get(key) ?? 0) + 1);
+  await flush();
 }
 
 async function flush() {

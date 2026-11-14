@@ -1,6 +1,5 @@
 import { readFileSync } from "node:fs";
 import { Hono } from "hono";
-import { serve } from "@hono/node-server";
 import {
   oauthProviderAuthServerMetadata,
   oauthProviderOpenIdConfigMetadata,
@@ -9,7 +8,7 @@ import {
 import QRCode from "qrcode";
 import { auth, db, googleEnabled, ownOrigin } from "./auth.ts";
 import admin from "./admin.ts";
-import { record, setupTraffic } from "./traffic.ts";
+import { record } from "./traffic.ts";
 import {
   consentPage,
   errorFromQuery,
@@ -37,7 +36,7 @@ app.use("*", async (c, next) => {
 const untracked = /^\/(health$|favicon\.ico$|assets\/|admin(\/|$))/;
 app.use("*", async (c, next) => {
   await next();
-  if (!untracked.test(c.req.path)) record(c.req.raw, c.req.path, c.res.status);
+  if (!untracked.test(c.req.path)) await record(c.req.raw, c.req.path, c.res.status);
 });
 
 app.route("/", admin);
@@ -166,6 +165,4 @@ app.post("/account/two-factor/enable", async (c) => {
   }
 });
 
-await setupTraffic();
-const port = Number(process.env.PORT ?? 3000);
-serve({ fetch: app.fetch, port }, () => console.log(`Auth server on :${port}`));
+export default app;
