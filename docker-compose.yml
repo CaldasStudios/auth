@@ -1,0 +1,26 @@
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: auth
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-auth}
+      POSTGRES_DB: auth
+    ports: ["127.0.0.1:5432:5432"]
+    volumes: [auth-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U auth"]
+      interval: 5s
+      retries: 10
+
+  auth:
+    build: .
+    profiles: [app]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://auth:${POSTGRES_PASSWORD:-auth}@db:5432/auth
+    ports: ["3000:3000"]
+    depends_on:
+      db: { condition: service_healthy }
+
+volumes:
+  auth-db:

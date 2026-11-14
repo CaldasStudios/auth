@@ -1,0 +1,31 @@
+{
+  "name": "caldas-auth",
+  "version": "1.0.0",
+  "description": "Centralized auth server for CaldasStudios apps (Better Auth, OAuth 2.1 / OIDC provider)",
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env --watch src/index.ts",
+    "start": "node src/index.ts",
+    "migrate": "node --env-file-if-exists=.env node_modules/.bin/auth migrate --config src/auth.ts -y",
+    "admin:create": "node --env-file-if-exists=.env scripts/create-admin.ts",
+    "client:create": "node --env-file-if-exists=.env scripts/create-client.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "type": "module",
+  "dependencies": {
+    "@better-auth/oauth-provider": "^1.7.24",
+    "@hono/node-server": "^2.1.8",
+    "better-auth": "^1.7.24",
+    "hono": "^4.13.18",
+    "pg": "^8.23.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "auth": "^1.7.24",
+    "typescript": "^7.0.2"
+  },
+  "private": true,
+  "engines": {
+    "node": ">=24"
+  }
+}

@@ -1,0 +1,145 @@
+# CaldasStudios Auth
+
+> Central sign-in for every CaldasStudios app. One user account works across all apps. This server owns identity (users, passwords, sessions) in its own database. Each app keeps its own database and never stores passwords. Apps connect with standard OpenID Connect (Authorization Code + PKCE), built on Better Auth 1.7 and its OAuth Provider plugin.
+
+Use this file when adding login to a new CaldasStudios app.
+
+## Key facts
+
+- Auth server URL (`CALDAS_AUTH_URL`): the deployed URL of this server, for example `https://auth.caldasstudios.com`. Locally it is `http://localhost:3000`.
+- Issuer: `${CALDAS_AUTH_URL}/api/auth`
+- Discovery: `${CALDAS_AUTH_URL}/api/auth/.well-known/openid-configuration`
+- Scopes: `openid profile email offline_access` (`offline_access` gives a refresh token)
+- PKCE with `S256` is required. Redirect URIs must match the registered ones exactly.
+- Client authentication at the token endpoint: `client_secret_basic`. Public clients (SPA or mobile) use `none` with PKCE only.
+- User identity: the `sub` claim. It is stable and unique per user across all apps.
+- The login, sign-up and consent pages live on the auth server. Apps never build their own login or password forms.
+- Production redirect URIs must be `https`. `http://localhost` and `http://127.0.0.1` work only while the auth server is not in production mode.
+
+## Endpoints
+
+All of these are under `${CALDAS_AUTH_URL}/api/auth`:
+
+- `GET  /.well-known/openid-configuration`: discovery
+- `GET  /oauth2/authorize`: start sign-in (browser redirect)
+- `POST /oauth2/token`: exchange the code or refresh token
+- `GET  /oauth2/userinfo`: profile, using `Authorization: Bearer <access_token>`
+- `GET  /oauth2/end-session`: sign out everywhere (RP-initiated logout)
+- `POST /oauth2/introspect`, `POST /oauth2/revoke`: token checks and revocation (client-authenticated)
+- `GET  /jwks`: public keys for verifying ID tokens
+
+## Step 1: Register the app (an admin does this on the auth server repo)
+
+```bash
+ADMIN_EMAIL=... ADMIN_PASSWORD=... npm run client:create -- \
+  --name "My App" \
+  --redirect https://myapp.caldasstudios.com/api/auth/callback/caldas \
+  --logout-redirect https://myapp.caldasstudios.com \
+  --trusted
+```
+
+- The command prints `client_id` and `client_secret`, and the secret is shown only once. Store them in the app's secrets as `CALDAS_CLIENT_ID` and `CALDAS_CLIENT_SECRET`. Never commit them.
+- `--trusted` marks a first-party app, so users see no consent screen. Then add its `client_id` to `TRUSTED_CLIENT_IDS` on the auth server and restart it.
+- `--public` is for SPA or mobile apps that cannot keep a secret. These apps get no secret and always show consent.
+- Register one `--redirect` per environment, for example production and `http://localhost:<port>/api/auth/callback/caldas` for development.
+
+## Step 2a: App uses Better Auth (preferred for TypeScript apps)
+
+The app runs its own Better Auth instance with its own database. Sign-in goes through the central server via the `genericOAuth` plugin.
+
+```bash
+npm install better-auth pg
+```
+
+```ts
+// src/auth.ts in the app
+import { betterAuth } from "better-auth";
+import { genericOAuth } from "better-auth/plugins";
+import { Pool } from "pg";
+
+export const auth = betterAuth({
+  database: new Pool({ connectionString: process.env.DATABASE_URL }), // the app's OWN database
+  emailAndPassword: { enabled: false }, // passwords live only on the auth server
+  plugins: [
+    genericOAuth({
+      config: [
+        {
+          providerId: "caldas", // makes the callback path /api/auth/callback/caldas
+          clientId: process.env.CALDAS_CLIENT_ID!,
+          clientSecret: process.env.CALDAS_CLIENT_SECRET!,
+          discoveryUrl: `${process.env.CALDAS_AUTH_URL}/api/auth/.well-known/openid-configuration`,
+          scopes: ["openid", "profile", "email", "offline_access"],
+          tokenEndpointAuth: { method: "client_secret_basic" }, // REQUIRED: the default "post" is rejected
+          postLogoutRedirectURI: process.env.BETTER_AUTH_URL, // must be registered with --logout-redirect
+        },
+      ],
+    }),
+  ],
+});
+```
+
+App environment:
+
+```
+BETTER_AUTH_URL=https://myapp.caldasstudios.com   # this app's own URL
+BETTER_AUTH_SECRET=<openssl rand -base64 32>      # this app's own secret, not the auth server's
+DATABASE_URL=postgres://...                       # this app's own database
+CALDAS_AUTH_URL=https://auth.caldasstudios.com
+CALDAS_CLIENT_ID=...
+CALDAS_CLIENT_SECRET=...
+```
+
+Create the app's tables with `npx auth@latest migrate`. Mount the handler at `/api/auth/*` the same way as for any Better Auth app (see https://better-auth.com/docs/integrations).
+
+Client side:
+
+```ts
+import { createAuthClient } from "better-auth/client"; // or better-auth/react, /vue, /svelte
+export const authClient = createAuthClient();
+
+await authClient.signIn.social({ provider: "caldas", callbackURL: "/dashboard" }); // no client plugin needed
+const { data: session } = await authClient.getSession();
+await authClient.signOut(); // also ends the session on the auth server
+```
+
+Server side: `await auth.api.getSession({ headers: request.headers })`.
+
+Users in a Better Auth app:
+- The app's database gets local `user`, `session` and `account` tables, which Better Auth fills on first sign-in.
+- Use the local `user.id` as the foreign key for the app's own tables.
+- The central identity is `account.accountId` where `account.providerId = "caldas"`. It equals `sub` on the auth server. Use it to match the same person across apps.
+
+## Step 2b: Any other stack (Python, Go, mobile, etc.)
+
+Use a maintained OpenID Connect client library, such as Authlib (Python), openid-client (Node), or AppAuth (iOS/Android). Configure it with:
+
+- `server_metadata_url` / issuer discovery: `${CALDAS_AUTH_URL}/api/auth/.well-known/openid-configuration`
+- `client_id` and `client_secret` from step 1, sent with HTTP Basic auth (`client_secret_basic`)
+- Authorization Code flow with PKCE `S256`, plus `state`; also send `nonce` and verify it in the ID token
+- `redirect_uri` exactly as registered
+- Verify the ID token with `/jwks`: issuer `${CALDAS_AUTH_URL}/api/auth` and audience `client_id`
+
+Then key the app's users by `sub`, for example `users.auth_sub text unique not null`.
+
+## Rules for implementers
+
+- Do not add password, sign-up or reset forms to apps. Send users to the auth server.
+- Do not share a database with the auth server or read its tables. Use only the OIDC endpoints.
+- Do not put the client secret in browser or mobile code. Use `--public` clients there.
+- Use `sub` (or the Better Auth `account.accountId`) as the cross-app user identity. Email can change.
+- Keep the callback path `/api/auth/callback/caldas` when using Better Auth.
+- Registering, changing or disabling an app is an admin task on the auth server, not something the app does.
+
+## Troubleshooting
+
+- `invalid_client` with "cannot use client_secret_post": set `tokenEndpointAuth: { method: "client_secret_basic" }`.
+- `invalid_redirect_uri`: the redirect is not registered exactly, or it is `http` on a non-local host or in production.
+- `error=invalid_code` on the app callback: check the auth server logs. It is usually client authentication or a redirect URI mismatch.
+- A consent screen appears for your own app: create it with `--trusted` and add it to `TRUSTED_CLIENT_IDS`.
+- `PROVIDER_NOT_FOUND`: the app could not fetch the discovery URL. Check `CALDAS_AUTH_URL` and network access.
+
+## More
+
+- [README](README.md): running and deploying the auth server
+- [Better Auth Generic OAuth](https://better-auth.com/docs/plugins/generic-oauth)
+- [Better Auth OAuth Provider](https://better-auth.com/docs/plugins/oauth-provider)
