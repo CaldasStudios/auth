@@ -1,7 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "hono",
-  "buildCommand": "npm run build",
   "functions": {
     "src/index.ts": {
       "includeFiles": "{assets/brand/*.svg,llms.txt,node_modules/@simplewebauthn/browser/dist/bundle/index.umd.min.js}"

@@ -40,7 +40,7 @@ To run the server in Docker as well: `docker compose --profile app up -d --build
 
 ## Deploy to Vercel with Neon
 
-The app runs as a Node.js 24 Hono function on Vercel. `src/index.ts` exports the handler; `src/local.ts` starts the local/Docker server. `vercel.json` includes the brand assets, passkey browser helper and integration guide, and runs the TypeScript check during builds.
+The app runs as a Node.js 24 Hono function on Vercel. `src/index.ts` exports the handler; `src/local.ts` starts the local/Docker server. `vercel.json` lets Vercel's native Hono/TypeScript builder handle the function and includes the brand assets, passkey browser helper and integration guide. Run `npm run build` locally or in CI for strict TypeScript checking.
 
 This checkout is linked to Neon project `empty-hat-54124356`, branch `production`. `neon.ts` declares the services; `neon deploy` provisions them and pulls connection settings into the ignored `.env` (or `.env.local`). The app reads those files for development, start, migration and integration commands. `DATABASE_URL` is pooled; `DATABASE_URL_UNPOOLED` is used automatically for migrations, with `DATABASE_URL` as the local Postgres fallback.
 
