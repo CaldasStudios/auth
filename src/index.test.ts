@@ -48,6 +48,8 @@ test("set password: the form shows only without a password, and the route checks
   const { auth } = await import("./auth.ts");
   const getSession = t.mock.method(auth.api, "getSession", async () => null);
   assert.equal((await post("https://auth.example.com", { newPassword: "long-enough-pw" })).status, 401);
+  // The freshness lookup must hit the database and must not extend a session it may refuse.
+  assert.deepEqual(getSession.mock.calls[0]?.arguments[0]?.query, { disableCookieCache: true, disableRefresh: true });
   getSession.mock.mockImplementation(async () => ({ session: { createdAt: new Date(Date.now() - 2 * 86400e3) } }) as never);
   assert.equal((await post("https://auth.example.com", { newPassword: "long-enough-pw" })).status, 403);
   // A fresh session reaches setPassword; Better Auth's errors keep their status and message.
