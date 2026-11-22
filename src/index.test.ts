@@ -65,7 +65,7 @@ test("set password: the form shows only without a password, and the route checks
   assert.equal(res.status, 400);
   assert.equal((await res.json()).message, "User already has a password set");
   setPassword.mock.mockImplementation(async () => {
-    throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505" });
+    throw Object.assign(new Error("duplicate key value violates unique constraint"), { code: "23505", constraint: "account_credential_user_unique" });
   });
   assert.equal((await post("https://auth.example.com", { newPassword: "long-enough-pw" })).status, 409);
 });
