@@ -172,7 +172,7 @@ app.post("/account/password", async (c) => {
   const newPassword = body?.newPassword;
   if (typeof newPassword !== "string" || !newPassword) return c.json({ message: "Enter a new password." }, 400);
   const headers = c.req.raw.headers;
-  const session = await auth.api.getSession({ headers, query: { disableCookieCache: true } });
+  const session = await auth.api.getSession({ headers, query: { disableCookieCache: true, disableRefresh: true } });
   if (!session) return c.json({ message: "Unauthorized" }, 401);
   // Same rule as Better Auth's freshSessionMiddleware (used for passkey registration); freshAge 0 turns it off.
   const { freshAge } = (await auth.$context).sessionConfig;
