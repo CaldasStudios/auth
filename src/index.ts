@@ -183,7 +183,9 @@ app.post("/account/password", async (c) => {
     c.header("Cache-Control", "no-store");
     return c.json({ status: true });
   } catch (error) {
-    const e = error as { statusCode?: number; body?: { message?: string } };
+    const e = error as { statusCode?: number; body?: { message?: string }; code?: string };
+    // A simultaneous request already added the password (unique index from scripts/setup-db.ts).
+    if (e.code === "23505") return c.json({ message: "A password was already set. Reload the page." }, 409);
     if (!e.statusCode) throw error;
     return c.json({ message: e.body?.message ?? "Could not set password." }, e.statusCode as 400);
   }
