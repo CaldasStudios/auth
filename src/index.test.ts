@@ -43,4 +43,11 @@ test("set password: the form shows only without a password, and the route checks
     });
   assert.equal((await post("https://evil.example", { newPassword: "long-enough-pw" })).status, 403);
   assert.equal((await post("https://auth.example.com", {})).status, 400);
+  assert.equal((await post("https://auth.example.com", null)).status, 400);
+  // Session lookups need the real schema, so they are stubbed: signed out gives 401, a 2-day-old session 403.
+  const { auth } = await import("./auth.ts");
+  const getSession = t.mock.method(auth.api, "getSession", async () => null);
+  assert.equal((await post("https://auth.example.com", { newPassword: "long-enough-pw" })).status, 401);
+  getSession.mock.mockImplementation(async () => ({ session: { createdAt: new Date(Date.now() - 2 * 86400e3) } }) as never);
+  assert.equal((await post("https://auth.example.com", { newPassword: "long-enough-pw" })).status, 403);
 });

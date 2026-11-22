@@ -296,7 +296,7 @@ const twoFactorSection = (user: HomeData["user"], hasPassword: boolean) => {
 
 const passwordSection = `<section aria-labelledby="pw-h"><h2 id="pw-h">Password</h2>
 <p>Not set. You sign in with Google or a passkey. Add a password to also sign in with your email, and to turn on two-step verification.</p>
-<form id="pw-set"><label for="pw-new">New password</label>
+<form id="pw-set" method="post"><label for="pw-new">New password</label>
 <input id="pw-new" name="newPassword" type="password" autocomplete="new-password" minlength="10" required aria-describedby="pw-hint">
 <p class="mono" id="pw-hint" style="font-size:12px;margin:6px 0 0">At least 10 characters.</p>
 <label for="pw-confirm">Confirm password</label>
