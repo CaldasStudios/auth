@@ -28,3 +28,19 @@ test("the serverless handler serves pages and bundled files without database set
   assert.equal(queries.length, 2);
   assert.ok(queries.every((sql) => sql.includes("insert into traffic_daily")));
 });
+
+test("set password: the form shows only without a password, and the route checks origin and input", async (t) => {
+  t.mock.method(db, "query", async () => ({ rows: [], rowCount: 1 }));
+  const { homePage } = await import("./pages.ts");
+  const data = { user: { name: "A", email: "a@example.com" }, googleLinked: false, googleEnabled: false, passkeys: [] };
+  assert.ok(homePage({ ...data, hasPassword: false }).includes('id="pw-set"'));
+  assert.ok(!homePage({ ...data, hasPassword: true }).includes('id="pw-set"'));
+  const post = (origin: string, body: unknown) =>
+    app.request("https://auth.example.com/account/password", {
+      method: "POST",
+      headers: { origin, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  assert.equal((await post("https://evil.example", { newPassword: "long-enough-pw" })).status, 403);
+  assert.equal((await post("https://auth.example.com", {})).status, 400);
+});

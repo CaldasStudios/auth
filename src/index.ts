@@ -165,4 +165,20 @@ app.post("/account/two-factor/enable", async (c) => {
   }
 });
 
+// Adds a password to an account created with Google or a passkey (Better Auth's setPassword is server-only).
+app.post("/account/password", async (c) => {
+  if (c.req.header("origin") !== ownOrigin) return c.json({ message: "Cross-site request refused" }, 403);
+  const { newPassword } = await c.req.json().catch(() => ({}));
+  if (typeof newPassword !== "string" || !newPassword) return c.json({ message: "Enter a new password." }, 400);
+  try {
+    await auth.api.setPassword({ headers: c.req.raw.headers, body: { newPassword } });
+    c.header("Cache-Control", "no-store");
+    return c.json({ status: true });
+  } catch (error) {
+    const e = error as { statusCode?: number; body?: { message?: string } };
+    if (!e.statusCode) throw error;
+    return c.json({ message: e.body?.message ?? "Could not set password." }, e.statusCode as 400);
+  }
+});
+
 export default app;
