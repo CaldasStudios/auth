@@ -69,7 +69,7 @@ Authentication stays on this app's Better Auth server to preserve 2FA and passke
    NODE_ENV=production npm run admin:create -- you@example.com 'a-long-password' "Your Name"
    ```
 
-   `npm run migrate` creates/updates the Better Auth tables, creates the dashboard traffic table, and applies the existing shared app ownership update. Run it again for schema changes before deploying the corresponding code. Migrations do not run during Vercel builds or requests.
+   `npm run migrate` creates/updates the Better Auth tables, creates the dashboard traffic table, adds a unique index that allows one password login per account, and applies the existing shared app ownership update. Run it again for schema changes before deploying the corresponding code. Migrations do not run during Vercel builds or requests.
 
 5. Deploy, then check `/health`, `/sign-in`, `/assets/webauthn.js`, and `/.well-known/openid-configuration`. Sign in as the admin to register apps at `/admin`. Register each app's production callback and logout URLs.
 

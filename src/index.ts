@@ -165,4 +165,30 @@ app.post("/account/two-factor/enable", async (c) => {
   }
 });
 
+// Adds a password to an account created with Google or a passkey (Better Auth's setPassword is server-only).
+app.post("/account/password", async (c) => {
+  if (c.req.header("origin") !== ownOrigin) return c.json({ message: "Cross-site request refused" }, 403);
+  const body = await c.req.json().catch(() => null);
+  const newPassword = body?.newPassword;
+  if (typeof newPassword !== "string" || !newPassword) return c.json({ message: "Enter a new password." }, 400);
+  const headers = c.req.raw.headers;
+  const session = await auth.api.getSession({ headers, query: { disableCookieCache: true, disableRefresh: true } });
+  if (!session) return c.json({ message: "Unauthorized" }, 401);
+  // Same rule as Better Auth's freshSessionMiddleware (used for passkey registration); freshAge 0 turns it off.
+  const { freshAge } = (await auth.$context).sessionConfig;
+  if (freshAge !== 0 && Date.now() - new Date(session.session.createdAt).getTime() >= freshAge * 1000)
+    return c.json({ message: "For your security, sign out and sign in again before setting a password." }, 403);
+  try {
+    await auth.api.setPassword({ headers, body: { newPassword } });
+    c.header("Cache-Control", "no-store");
+    return c.json({ status: true });
+  } catch (error) {
+    const e = error as { statusCode?: number; body?: { message?: string }; code?: string; constraint?: string };
+    // A simultaneous request already added the password (unique index from scripts/setup-db.ts).
+    if (e.code === "23505" && e.constraint === "account_credential_user_unique") return c.json({ message: "A password was already set. Reload the page." }, 409);
+    if (!e.statusCode) throw error;
+    return c.json({ message: e.body?.message ?? "Could not set password." }, e.statusCode as 400);
+  }
+});
+
 export default app;

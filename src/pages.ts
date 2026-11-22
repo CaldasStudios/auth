@@ -269,7 +269,7 @@ type HomeData = {
 const day = (d: Date | string) => new Date(d).toISOString().slice(0, 10);
 
 const twoFactorSection = (user: HomeData["user"], hasPassword: boolean) => {
-  if (!hasPassword) return `<p>Available for accounts that sign in with a password.</p>`;
+  if (!hasPassword) return `<p>Set a password above to turn this on.</p>`;
   if (user.twoFactorEnabled)
     return `<p><span class="on">On.</span> Signing in with your password also asks for a code from your authenticator app.</p>
 <form id="tf-manage"><label for="tf-pw">Current password</label>
@@ -294,6 +294,17 @@ const twoFactorSection = (user: HomeData["user"], hasPassword: boolean) => {
 <button type="submit">Turn on</button></form>`;
 };
 
+const passwordSection = `<section aria-labelledby="pw-h"><h2 id="pw-h">Password</h2>
+<p>Not set. You sign in with Google or a passkey. Add a password to also sign in with your email, and to turn on two-step verification.</p>
+<form id="pw-set" method="post"><label for="pw-new">New password</label>
+<input id="pw-new" name="newPassword" type="password" autocomplete="new-password" minlength="10" required aria-describedby="pw-hint">
+<p class="mono" id="pw-hint" style="font-size:12px;margin:6px 0 0">At least 10 characters.</p>
+<label for="pw-confirm">Confirm password</label>
+<input id="pw-confirm" name="confirm" type="password" autocomplete="new-password" minlength="10" required>
+<div role="alert" aria-live="polite"></div>
+<button type="submit" class="secondary">Set password</button></form></section>
+`;
+
 const googleSection = (email: string, linked: boolean) => `<section aria-labelledby="g-h"><h2 id="g-h">Google</h2>
 ${
   linked
@@ -307,7 +318,7 @@ export const homePage = ({ user, hasPassword, googleLinked, googleEnabled, passk
     "Account",
     `<h1>Hi, ${esc(user.name)}</h1><p>Signed in as ${esc(user.email)}.</p>
 ${user.role === "admin" ? `<p><a href="/admin">Open the admin dashboard</a></p>` : ""}
-
+${hasPassword ? "" : passwordSection}
 <section aria-labelledby="tf-h"><h2 id="tf-h">Two-step verification</h2>
 ${twoFactorSection(user, hasPassword)}
 </section>
@@ -335,6 +346,11 @@ const showCodes = (el, codes) => {
   el.replaceChildren(...codes.map((c) => Object.assign(document.createElement("span"), { textContent: c })));
 };
 bind($("out"), async () => { await call("/sign-out", {}); return { url: "/sign-in" }; });
+if ($("pw-set")) bind($("pw-set"), async (v) => {
+  if (v.newPassword !== v.confirm) throw new Error("The passwords don't match.");
+  await call("/account/password", { newPassword: v.newPassword }, "");
+  return { url: "/" };
+});
 if ($("tf-start")) bind($("tf-start"), async (v) => {
   const data = await call("/account/two-factor/enable", v, "");
   $("tf-qr").innerHTML = data.qr;
